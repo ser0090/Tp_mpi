@@ -7,5 +7,5 @@ all: $(CODE)
 	$(CC) -o main $(CODE)
 
 run:
-	$(RUNNER) -n $(PROC_COUNT) ./main
+	$(RUNNER) -np $(PROC_COUNT) ./main
 
