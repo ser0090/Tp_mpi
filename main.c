@@ -31,16 +31,22 @@ int main(int argc, char** argv) {
     my_sub_a_t* sub_a;
     my_sub_b_t* sub_b;
 
-    sub_a = (my_sub_a_t*) malloc((SIZE/2)*SIZE*sizeof(int32_t));
-    sub_b = (my_sub_b_t*) malloc(SIZE*(SIZE/2)*sizeof(int32_t));
-    sub_c = (my_sub_c_t*) malloc((SIZE/2)*(SIZE/2)*sizeof(int32_t));
-
 //    printf("antes del mpi init\n");
     MPI_Init(NULL, NULL);   // Initialize the MPI environment
     MPI_Status stat;        // required variable for receive routines
 
     MPI_Comm_size(MPI_COMM_WORLD, &world_size); // Get the number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);       // Get the rank of the process
+
+/*#################################################################
+######################  INICIALIZACION  ###########################
+##################################################################*/
+
+    sub_a = (my_sub_a_t*) malloc((SIZE/2)*SIZE*sizeof(int32_t));
+    sub_b = (my_sub_b_t*) malloc(SIZE*(SIZE/2)*sizeof(int32_t));
+    sub_c = (my_sub_c_t*) malloc((SIZE/2)*(SIZE/2)*sizeof(int32_t));
+
+
     //printf("por hacer algo rankl %d\n", rank);
 
     if(rank==MASTER){
@@ -70,7 +76,9 @@ int main(int argc, char** argv) {
     }
 //    printf("Estoy por enviar/recibir primer transmision rank:%d\n",rank );
 
-
+/*#################################################################
+#################  FRACCIONAMIENTO DE MATRICES  ###################
+##################################################################*/
     if(rank==MASTER) {
         for (int32_t k = 0; k < 2; ++k) {
             for (int32_t i = 0; i < 2; ++i) {
@@ -129,7 +137,9 @@ int main(int argc, char** argv) {
         }
     }
 
-
+/*#################################################################
+#######################   PROCESAMIENTO   #########################
+##################################################################*/
     printf("Estoy por procesar - rank:%d\n",rank );
 
     int32_t tmp;
@@ -150,45 +160,32 @@ int main(int argc, char** argv) {
             MPI_Recv(&((*matrix_c)[j+SIZE/2]), SIZE/2, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, &stat);
             MPI_Recv(&((*matrix_c)[j+SIZE/2][SIZE/2]), SIZE/2, MPI_INT, 3, TAG_C, MPI_COMM_WORLD, &stat);
 
-//            MPI_Send(sub_c[j], SIZE/2, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
-//            MPI_Recv(matrix_c[j], SIZE/2, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD, &stat);
         }
 
-        //if(rank==0){ // el master copia los valores del producto a la matriz original
           for (int32_t i = 0; i < SIZE/2 ; ++i) {
               for (int32_t j = 0; j <SIZE/2 ; j++) {
                 (*matrix_c)[i][j]=(*sub_c)[i][j];
               }
           }
 
-        /*free(matrix_a);
-        free(matrix_b);
-        free(matrix_c);
-*/
-        //}
-
-        //IMPRIME C
-/*        for (int32_t i = 0; i < SIZE; ++i) {
-            for (int j = 0; j < SIZE; ++j) {
-                printf("%d ", matrix_c[i][j]);
-            }
-            printf("\n");
-        }
-*/
         // COMPROBACION
         if(control((int32_t**)matrix_c,SIZE*SIZE)==SUCCESS)
             printf("TOdo OK wacho!\n");
         else
             printf("SE PUDRIO TODO!\n");
+
+        free(matrix_a);
+        free(matrix_b);
+        free(matrix_c);
     }
     else {
         for (int32_t j = 0; j < SIZE/2; ++j) {
             MPI_Send((*sub_c)[j], SIZE/2, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
         }
     }
-    //free(sub_a);
-    //free(sub_b);
-    //free(sub_c);
+    free(sub_a);
+    free(sub_b);
+    free(sub_c);
 
     MPI_Finalize();
     exit(EXIT_SUCCESS);
