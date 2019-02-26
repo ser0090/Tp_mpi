@@ -1,8 +1,10 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
+#include <sys/sysinfo.h>
 
-#define SIZE 1024
+#define SIZE 2000 
 #define MASTER 0
 #define TAG_A 1
 #define TAG_B 2
@@ -22,6 +24,8 @@ int main(int argc, char** argv) {
 
     int32_t world_size;
     int32_t rank;
+    
+    int32_t procs_count;
 
     my_matrix_t* matrix_a;
     my_matrix_t* matrix_b;
@@ -31,7 +35,6 @@ int main(int argc, char** argv) {
     my_sub_a_t* sub_a;
     my_sub_b_t* sub_b;
 
-//    printf("antes del mpi init\n");
     MPI_Init(NULL, NULL);   // Initialize the MPI environment
     MPI_Status stat;        // required variable for receive routines
 
@@ -46,35 +49,29 @@ int main(int argc, char** argv) {
     sub_b = (my_sub_b_t*) malloc(SIZE*(SIZE/2)*sizeof(int32_t));
     sub_c = (my_sub_c_t*) malloc((SIZE/2)*(SIZE/2)*sizeof(int32_t));
 
-
-    //printf("por hacer algo rankl %d\n", rank);
-
-    if(rank==MASTER){
+    if(rank == MASTER){
         matrix_a = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
-        matrix_b = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
+        matrix_b = (my_matrix_t*) calloc(SIZE*SIZE, sizeof(int32_t));
         matrix_c = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
 
         for (int32_t i = 0; i < SIZE; ++i) {
             for (int32_t j = 0; j < SIZE; ++j) {
                 (*matrix_a)[i][j]=j+i*SIZE;
-                (*matrix_b)[i][j]=0;
+                //(*matrix_b)[i][j]=0;
                 //printf("%d ",matrix_a[i][j]);
             }
-//            printf("columna %d",i);
         }
         for (int32_t i = 0; i < SIZE; ++i) {
             (*matrix_b)[i][i] = 1; //matriz identidad
         }
         // el master copia los valores a la sub_matrix
-//      printf("Estoy por copiar mi sub rank:%d\n",rank );
         for (int32_t i = 0; i < SIZE/2 ; ++i) {
             for (int32_t j = 0; j <SIZE/2 ; j++) {
-                (*sub_a)[i][j]=(*matrix_a)[i][j];
-                (*sub_b)[i][j]=(*matrix_b)[i][j];
+                (*sub_a)[i][j] = (*matrix_a)[i][j];
+                (*sub_b)[i][j] = (*matrix_b)[i][j];
             }
         }
     }
-//    printf("Estoy por enviar/recibir primer transmision rank:%d\n",rank );
 
 /*#################################################################
 #################  FRACCIONAMIENTO DE MATRICES  ###################
@@ -140,10 +137,16 @@ int main(int argc, char** argv) {
 /*#################################################################
 #######################   PROCESAMIENTO   #########################
 ##################################################################*/
-    printf("Estoy por procesar - rank:%d\n",rank );
+    //printf("Estoy por procesar - rank:%d\n",rank );
 
-    int32_t tmp;
+    register int32_t tmp;
+    procs_count = get_nprocs(); 
+    omp_set_num_threads(procs_count/2);
+    
     // PROUCTO dejando fija la columna de B
+   // #pragma openmp parallel
+//{ 
+   #pragma omp parallel for
     for (int32_t i=0; i<SIZE/2; i++){ //i para las filas de la matriz resultante
         for (int32_t j=0; j<SIZE/2 ;j++){ // i para las columnas de la matriz resultante
             tmp = 0 ;
@@ -153,7 +156,7 @@ int main(int argc, char** argv) {
             (*sub_c)[j][i] = tmp;
         }
     }
-
+//}
     if(rank == MASTER) {
         for (int32_t j=0; j<SIZE/2; ++j) {
             MPI_Recv(&((*matrix_c)[j][SIZE/2]), SIZE/2, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, &stat);
