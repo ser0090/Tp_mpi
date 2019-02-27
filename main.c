@@ -4,7 +4,7 @@
 #include <omp.h>
 #include <sys/sysinfo.h>
 
-#define SIZE 2000 
+#define SIZE 2000
 #define MASTER 0
 #define TAG_A 1
 #define TAG_B 2
@@ -24,9 +24,9 @@ int main(int argc, char** argv) {
 
     int32_t world_size;
     int32_t rank;
-    
-    int32_t procs_count;
 
+    int32_t procs_count;
+    double start_time;
     my_matrix_t* matrix_a;
     my_matrix_t* matrix_b;
     my_matrix_t* matrix_c;
@@ -50,6 +50,8 @@ int main(int argc, char** argv) {
     sub_c = (my_sub_c_t*) malloc((SIZE/2)*(SIZE/2)*sizeof(int32_t));
 
     if(rank == MASTER){
+	double start=omp_get_wtime();
+	start_time=start;
         matrix_a = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
         matrix_b = (my_matrix_t*) calloc(SIZE*SIZE, sizeof(int32_t));
         matrix_c = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
@@ -59,7 +61,7 @@ int main(int argc, char** argv) {
                 (*matrix_a)[i][j]=j+i*SIZE;
                 //(*matrix_b)[i][j]=0;
                 //printf("%d ",matrix_a[i][j]);
-            }
+            }printf("tiempo en fraccionar: %f",omp_get_wtime()-start);
         }
         for (int32_t i = 0; i < SIZE; ++i) {
             (*matrix_b)[i][i] = 1; //matriz identidad
@@ -71,12 +73,14 @@ int main(int argc, char** argv) {
                 (*sub_b)[i][j] = (*matrix_b)[i][j];
             }
         }
+	printf("tiempo para iniciar la matriz: %f\n",omp_get_wtime()-start);
     }
 
 /*#################################################################
 #################  FRACCIONAMIENTO DE MATRICES  ###################
 ##################################################################*/
     if(rank==MASTER) {
+	double start = omp_get_wtime();
         for (int32_t k = 0; k < 2; ++k) {
             for (int32_t i = 0; i < 2; ++i) {
                 if ((i + 2 * k)) {
@@ -91,6 +95,7 @@ int main(int argc, char** argv) {
                 }
             }
         }
+	printf("tiempo en fraccionar: %f\n",omp_get_wtime()-start);
     }
     else{
         for (int32_t k = 0; k < 2; ++k) {
@@ -140,13 +145,13 @@ int main(int argc, char** argv) {
     //printf("Estoy por procesar - rank:%d\n",rank );
 
     register int32_t tmp;
-    procs_count = get_nprocs(); 
-    omp_set_num_threads(procs_count/2);
-    
+    procs_count = get_nprocs();
+//    omp_set_num_threads(procs_count/2);
+
     // PROUCTO dejando fija la columna de B
    // #pragma openmp parallel
-//{ 
-   #pragma omp parallel for
+//{
+//   #pragma omp parallel for
     for (int32_t i=0; i<SIZE/2; i++){ //i para las filas de la matriz resultante
         for (int32_t j=0; j<SIZE/2 ;j++){ // i para las columnas de la matriz resultante
             tmp = 0 ;
@@ -158,6 +163,7 @@ int main(int argc, char** argv) {
     }
 //}
     if(rank == MASTER) {
+	  double start = omp_get_wtime();
         for (int32_t j=0; j<SIZE/2; ++j) {
             MPI_Recv(&((*matrix_c)[j][SIZE/2]), SIZE/2, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, &stat);
             MPI_Recv(&((*matrix_c)[j+SIZE/2]), SIZE/2, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, &stat);
@@ -171,6 +177,8 @@ int main(int argc, char** argv) {
               }
           }
 
+        printf("tiempo en construir c: %f\n",omp_get_wtime()-start);
+        printf("tiempo Total: %f\n",omp_get_wtime()-start_time);
         // COMPROBACION
         if(control((int32_t**)matrix_c,SIZE*SIZE)==SUCCESS)
             printf("TOdo OK wacho!\n");
