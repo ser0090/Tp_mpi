@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
                 (*matrix_a)[i][j]=j+i*SIZE;
                 //(*matrix_b)[i][j]=0;
                 //printf("%d ",matrix_a[i][j]);
-            }printf("tiempo en fraccionar: %f",omp_get_wtime()-start);
+            }
         }
         for (int32_t i = 0; i < SIZE; ++i) {
             (*matrix_b)[i][i] = 1; //matriz identidad
