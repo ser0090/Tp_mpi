@@ -4,7 +4,7 @@
 #include <omp.h>
 #include <sys/sysinfo.h>
 
-#define SIZE 2000
+#define SIZE 1024
 #define MASTER 0
 #define TAG_A 1
 #define TAG_B 2
@@ -165,6 +165,8 @@ int main(int argc, char** argv) {
 
 //    printf("Estoy por enviar sub rank:%d\n",rank );
 
+
+
     if(!(rank&1)){ //is rank es par para A
         fragment_a_stat[rank+1]=(MPI_Status*)malloc(SUB_SIZE*sizeof(MPI_Status));
         fragment_a_req[rank+1]=(MPI_Request*)malloc(SUB_SIZE*sizeof(MPI_Request));
@@ -207,16 +209,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    for(int i=0;i<4;i++){ // espera a quien pueda esperar.
-      if(fragment_a_req[i]!=NULL && i!=rank){
-          printf("esperando transferencia de %d - rank %d\n",i,rank);
-          MPI_Waitall(SUB_SIZE,fragment_a_req[i],fragment_a_stat[i]);
-        }
-      if(fragment_b_req[i]!=NULL && i!=rank){
-          printf("esperando transferencia de %d - rank %d\n",i,rank);
-          MPI_Waitall(SUB_SIZE,fragment_b_req[i],fragment_b_stat[i]);
-        }
-    }
+
 
 /*#################################################################
 #######################   PROCESAMIENTO   #########################
@@ -231,7 +224,12 @@ int main(int argc, char** argv) {
    // #pragma openmp parallel
 //{
 //   #pragma omp parallel for
+    int32_t wait_b_from = (!(rank/2))? rank+2:rank-2;
+    int32_t wait_a_from = (!(rank&1))? rank+1:rank-1;
+    MPI_Waitall(SUB_SIZE,fragment_a_req[wait_a_from],fragment_a_stat[wait_a_from]);
+
     for (int32_t i=0; i<SUB_SIZE; i++){ //i para las filas de la matriz resultante
+        MPI_Wait(&(fragment_b_req[wait_b_from][i]),&(fragment_b_stat[wait_b_from][i]));
         for (int32_t j=0; j<SUB_SIZE ;j++){ // i para las columnas de la matriz resultante
             tmp = 0 ;
             for (int32_t k=0; k<SIZE; k++){ //k para realizar la multiplicacion de los elementos
@@ -242,35 +240,50 @@ int main(int argc, char** argv) {
     }
 //}
     if(rank == MASTER) {
-	  double start = omp_get_wtime();
+        for(int i=1;i<4;i++){
+          if(fragment_a_req[i]==NULL){ // tecnicamente espera c pero uso los request de a para no allocar mas
+              fragment_a_stat[i]=(MPI_Status*)malloc(SUB_SIZE*sizeof(MPI_Status));
+              fragment_a_req[i]=(MPI_Request*)malloc(SUB_SIZE*sizeof(MPI_Request));
+            }
+          }
+	      double start = omp_get_wtime();
         for (int32_t j=0; j<SUB_SIZE; ++j) {
-            MPI_Recv(&((*matrix_c)[j][SUB_SIZE]), SUB_SIZE, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, &stat);
-            MPI_Recv(&((*matrix_c)[j+SUB_SIZE]), SUB_SIZE, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, &stat);
-            MPI_Recv(&((*matrix_c)[j+SUB_SIZE][SUB_SIZE]), SUB_SIZE, MPI_INT, 3, TAG_C, MPI_COMM_WORLD, &stat);
+            MPI_Irecv(&((*matrix_c)[j][SUB_SIZE]), SUB_SIZE, MPI_INT, 1, 1, MPI_COMM_WORLD, &(fragment_a_req[1][j]));
+            MPI_Irecv(&((*matrix_c)[j+SUB_SIZE]), SUB_SIZE, MPI_INT, 2, 2, MPI_COMM_WORLD, &(fragment_a_req[2][j]));
+            MPI_Irecv(&((*matrix_c)[j+SUB_SIZE][SUB_SIZE]), SUB_SIZE, MPI_INT, 3, 3, MPI_COMM_WORLD, &(fragment_a_req[3][j]));
 
         }
 
-          for (int32_t i = 0; i < SUB_SIZE ; ++i) {
-              for (int32_t j = 0; j <SUB_SIZE ; j++) {
-                (*matrix_c)[i][j]=(*sub_c)[i][j];
-              }
-          }
+        for (int32_t i = 0; i < SUB_SIZE ; ++i) {
+            for (int32_t j = 0; j <SUB_SIZE ; j++) {
+              (*matrix_c)[i][j]=(*sub_c)[i][j];
+            }
+        }
+
+        MPI_Waitall(SUB_SIZE,fragment_a_req[1],fragment_a_stat[1]);
+        MPI_Waitall(SUB_SIZE,fragment_a_req[2],fragment_a_stat[2]);
+        MPI_Waitall(SUB_SIZE,fragment_a_req[3],fragment_a_stat[3]);
 
         printf("tiempo en construir c: %f\n",omp_get_wtime()-start);
         printf("tiempo Total: %f\n",omp_get_wtime()-start_time);
         // COMPROBACION
         if(control((int32_t**)matrix_c,SIZE*SIZE)==SUCCESS)
-            printf("TOdo OK wacho!\n");
+            printf("Todo OK wacho ^^\n");
         else
-            printf("SE PUDRIO TODO!\n");
+            printf("SE PUDRIO TODO T.T\n");
 
         free(matrix_a);
         free(matrix_b);
         free(matrix_c);
     }
     else {
+        printf("termino de procesar - rank %d\n",rank);
+        MPI_Request aux_req;
         for (int32_t j = 0; j < SUB_SIZE; ++j) {
-            MPI_Send((*sub_c)[j], SUB_SIZE, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
+            printf("enviando fila %d - rank %d\n",j,rank);
+            MPI_Isend((*sub_c)[j], SUB_SIZE, MPI_INT, MASTER, rank, MPI_COMM_WORLD,&aux_req);
+            printf("sent fila %d - rank %d\n",j,rank);
+            MPI_Request_free(&aux_req);
         }
     }
     free(sub_a);
