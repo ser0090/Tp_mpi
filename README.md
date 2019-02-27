@@ -1,6 +1,7 @@
 # Tp_mpi
 
-## Comands
-´´´
+#### Comands
+````
 mpirun -np 4 --hostfile myhosts
-´´´
+
+````
