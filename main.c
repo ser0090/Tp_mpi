@@ -34,28 +34,28 @@ int main(int argc, char** argv) {
     my_sub_b_t* sub_b;
 
     MPI_Init(NULL, NULL);   // Initialize the MPI environment
-    MPI_Status stat;        // required variable for receive routines
+    //MPI_Status stat;        // required variable for receive routines
 
     MPI_Comm_size(MPI_COMM_WORLD, &world_size); // Get the number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);       // Get the rank of the process
 
-/*#################################################################
-######################  INICIALIZACION  ###########################
-##################################################################*/
+    /*#################################################################
+    ######################  INICIALIZACION  ###########################
+    ##################################################################*/
 
     sub_a = (my_sub_a_t*) malloc((HALF_SIZE)*SIZE*sizeof(int32_t));
     sub_b = (my_sub_b_t*) malloc(SIZE*(HALF_SIZE)*sizeof(int32_t));
     sub_c = (my_sub_c_t*) malloc((HALF_SIZE)*(HALF_SIZE)*sizeof(int32_t));
 
     if(rank == MASTER){
-	double start=omp_get_wtime();
-	start_time=start;
+	    double start=omp_get_wtime();
+	    start_time = start;
         matrix_a = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
         matrix_b = (my_matrix_t*) calloc(SIZE*SIZE, sizeof(int32_t));
         matrix_c = (my_matrix_t*) malloc(SIZE*SIZE*sizeof(int32_t));
 
-        for (int32_t i = 0; i < SIZE; ++i) {
-            for (int32_t j = 0; j < SIZE; ++j) {
+        for (int32_t j = 0; j < SIZE; ++j) {
+            for (int32_t i = 0; i < SIZE; ++i) {
                 (*matrix_a)[i][j]=j+i*SIZE;
             }
         }
@@ -63,20 +63,20 @@ int main(int argc, char** argv) {
             (*matrix_b)[i][i] = 1; //matriz identidad
         }
         // el master copia los valores a la sub_matrix
-        for (int32_t i = 0; i < HALF_SIZE ; ++i) {
-            for (int32_t j = 0; j <HALF_SIZE ; j++) {
+        for (int32_t j = 0; j <HALF_SIZE ; j++) {
+            for (int32_t i = 0; i < HALF_SIZE ; ++i) {
                 (*sub_a)[i][j] = (*matrix_a)[i][j];
                 (*sub_b)[i][j] = (*matrix_b)[i][j];
             }
         }
-	printf("tiempo para iniciar la matriz: %f\n",omp_get_wtime()-start);
-    //}
 
-/*#################################################################
-#################  FRACCIONAMIENTO DE MATRICES  ###################
-##################################################################*/
-    //if(rank==MASTER) {
-	 start = omp_get_wtime();
+	    printf("tiempo para iniciar la matriz: %f\n",omp_get_wtime()-start);
+
+        /*#################################################################
+        #################  FRACCIONAMIENTO DE MATRICES  ###################
+        ##################################################################*/
+
+        start = omp_get_wtime();
         for (int32_t k = 0; k < 2; ++k) {
             for (int32_t i = 0; i < 2; ++i) {
                 if ((i | k << 1)) {
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
                 }
             }
         }
-	printf("tiempo en fraccionar: %f\n",omp_get_wtime()-start);
+	    printf("tiempo en fraccionar: %f\n",omp_get_wtime()-start);
     }
     else{
         for (int32_t k = 0; k < 2; ++k) {
@@ -97,51 +97,48 @@ int main(int argc, char** argv) {
                 if(rank == (i+2*k) && (i+k)){
                     for (int32_t j = 0; j <HALF_SIZE ; j++) {
                         MPI_Recv(&((*sub_a)[j][(rank & 1) * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER, TAG_A,
-                                MPI_COMM_WORLD, &stat);
+                                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         //TOD: revisar j-(rank&1) esta medio hardcode
                         MPI_Recv(&((*sub_b)[j-(rank & 1) + k * HALF_SIZE][i * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER,
-                                TAG_B, MPI_COMM_WORLD, &stat);
+                                TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                     }
                 }
             }
         }
     }
-/*#################################################################
-#######################  ENVIO DE SUB MATRICES  ###################
-##################################################################*/
-
+    /*#################################################################
+    #######################  ENVIO DE SUB MATRICES  ###################
+    ##################################################################*/
     if(!(rank & 1)){ //is rank es par para A
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Send(&((*sub_a)[j]),HALF_SIZE, MPI_INT, rank+1, TAG_A, MPI_COMM_WORLD);
-            MPI_Recv(&((*sub_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, rank+1, TAG_A, MPI_COMM_WORLD, &stat);
+            MPI_Sendrecv((*sub_a)+j, HALF_SIZE, MPI_INT, rank+1, TAG_A,&((*sub_a)[j][HALF_SIZE]),HALF_SIZE,
+                         MPI_INT, rank+1,TAG_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
     else{
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Recv(&((*sub_a)[j]), HALF_SIZE, MPI_INT, rank-1, TAG_A, MPI_COMM_WORLD, &stat);
-            MPI_Send(&((*sub_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, rank-1, TAG_A, MPI_COMM_WORLD);
+         MPI_Sendrecv(&((*sub_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, rank-1, TAG_A,(*sub_a)+j,HALF_SIZE,
+                         MPI_INT, rank-1,TAG_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
 
     if(!(rank >> 1)){ // Pasaje de Matrix B  (rank >> 1) -> rank/2
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Send(((*sub_b)[j]),HALF_SIZE, MPI_INT, rank+2, TAG_B, MPI_COMM_WORLD);
-            MPI_Recv(((*sub_b)[j+HALF_SIZE]), HALF_SIZE, MPI_INT, rank+2, TAG_B, MPI_COMM_WORLD, &stat);
+            MPI_Sendrecv((*sub_b)+j, HALF_SIZE, MPI_INT, rank+2, TAG_B, (*sub_b)+j+HALF_SIZE, HALF_SIZE,
+                         MPI_INT, rank+2,TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
     else{
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Recv((*sub_b)[j], HALF_SIZE, MPI_INT, rank-2, TAG_B, MPI_COMM_WORLD, &stat);
-            MPI_Send(((*sub_b)[j+HALF_SIZE]), HALF_SIZE, MPI_INT, rank-2, TAG_B, MPI_COMM_WORLD);
+            MPI_Sendrecv((*sub_b)+j+HALF_SIZE, HALF_SIZE, MPI_INT, rank-2, TAG_B, (*sub_b)+j, HALF_SIZE,
+                         MPI_INT, rank-2,TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
 
-/*#################################################################
-#######################   PROCESAMIENTO   #########################
-##################################################################*/
-
+    /*#################################################################
+    #######################   PROCESAMIENTO   #########################
+    ##################################################################*/
     register int32_t tmp;
-
     // PROUCTO dejando fija la columna de B
     for (int32_t i=0; i<HALF_SIZE; i++){ //i para las filas de la matriz resultante
         for (int32_t j=0; j<HALF_SIZE ;j++){ // i para las columnas de la matriz resultante
@@ -153,18 +150,15 @@ int main(int argc, char** argv) {
         }
     }
 
-/*#################################################################
-############################ RESULTADO   #########################
-##################################################################*/
-
-
+    /*#################################################################
+    ############################ RESULTADO   #########################
+    ##################################################################*/
     if(rank == MASTER) {
         double start = omp_get_wtime();
         for (int32_t j=0; j<HALF_SIZE; ++j) {
-            MPI_Recv(&((*matrix_c)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, &stat);
-            MPI_Recv(&((*matrix_c)[j+HALF_SIZE]), HALF_SIZE, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, &stat);
-            MPI_Recv(&((*matrix_c)[j+HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3, TAG_C, MPI_COMM_WORLD, &stat);
-
+            MPI_Recv(&((*matrix_c)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv((*matrix_c)+j+HALF_SIZE, HALF_SIZE, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&((*matrix_c)[j+HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
         for (int32_t i = 0; i < HALF_SIZE ; ++i) {
             for (int32_t j = 0; j <HALF_SIZE ; j++) {
@@ -186,7 +180,7 @@ int main(int argc, char** argv) {
     }
     else {
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Send((*sub_c)[j], HALF_SIZE, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
+            MPI_Send((*sub_c)+j, HALF_SIZE, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
         }
     }
     free(sub_a);
@@ -197,8 +191,7 @@ int main(int argc, char** argv) {
     exit(EXIT_SUCCESS);
 }
 
-int control(int32_t **matrix, int32_t size)
-{
+int control(int32_t **matrix, int32_t size) {
     int32_t* aux= (int32_t*)matrix;
     for(int32_t i=0; i<size-1 ;i++){
         if(*(aux+i) >= *(aux+i+1)) return ERROR;
