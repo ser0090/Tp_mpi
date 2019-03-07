@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define SIZE 2000
+#define SIZE 1024
 #define HALF_SIZE SIZE/2
 #define MASTER 0
 #define TAG_A 1
@@ -43,9 +43,9 @@ int main(int argc, char** argv) {
     ######################  INICIALIZACION  ###########################
     ##################################################################*/
 
-    sub_a = (my_sub_a_t*) malloc((HALF_SIZE)*SIZE*sizeof(int32_t));
-    sub_b = (my_sub_b_t*) malloc(SIZE*(HALF_SIZE)*sizeof(int32_t));
-    sub_c = (my_sub_c_t*) malloc((HALF_SIZE)*(HALF_SIZE)*sizeof(int32_t));
+    sub_a = (my_sub_a_t*) calloc((HALF_SIZE)*SIZE,sizeof(int32_t));
+    sub_b = (my_sub_b_t*) calloc(SIZE*(HALF_SIZE),sizeof(int32_t));
+    sub_c = (my_sub_c_t*) calloc((HALF_SIZE)*(HALF_SIZE),sizeof(int32_t));
 
     if(rank == MASTER){
 	    double start=omp_get_wtime();
@@ -76,35 +76,36 @@ int main(int argc, char** argv) {
         #################  FRACCIONAMIENTO DE MATRICES  ###################
         ##################################################################*/
 
-        start = omp_get_wtime();
-        for (int32_t k = 0; k < 2; ++k) {
-            for (int32_t i = 0; i < 2; ++i) {
-                if ((i | k << 1)) {
-                    for (int32_t j = 0; j < HALF_SIZE; j++) {
-                        MPI_Send(&((*matrix_a)[j + k * HALF_SIZE][i * HALF_SIZE]), HALF_SIZE, MPI_INT, (i + 2 * k),
-                                TAG_A, MPI_COMM_WORLD);
-                        MPI_Send(&((*matrix_b)[j + k * HALF_SIZE][i * HALF_SIZE]), HALF_SIZE, MPI_INT, (i + 2 * k),
-                                TAG_B, MPI_COMM_WORLD);
-                    }
-                }
-            }
-        }
+      start = omp_get_wtime();
+      for (int32_t j = 0; j < HALF_SIZE; j++) {
+          MPI_Send(&((*matrix_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT,1,
+                  TAG_A, MPI_COMM_WORLD);
+          MPI_Send(&((*matrix_b)[j][HALF_SIZE]), HALF_SIZE, MPI_INT,1,
+                  TAG_B, MPI_COMM_WORLD);
+
+          MPI_Send(&((*matrix_a)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT, 2,
+                  TAG_A, MPI_COMM_WORLD);
+          MPI_Send(&((*matrix_b)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT, 2,
+                  TAG_B, MPI_COMM_WORLD);
+
+          MPI_Send(&((*matrix_a)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3,
+                  TAG_A, MPI_COMM_WORLD);
+          MPI_Send(&((*matrix_b)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3,
+                  TAG_B, MPI_COMM_WORLD);
+      }
+
 	    printf("tiempo en fraccionar: %f\n",omp_get_wtime()-start);
     }
     else{
-        for (int32_t k = 0; k < 2; ++k) {
-            for (int32_t i = 0; i < 2 ; ++i) {
-                if(rank == (i+2*k) && (i+k)){
-                    for (int32_t j = 0; j <HALF_SIZE ; j++) {
-                        MPI_Recv(&((*sub_a)[j][(rank & 1) * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER, TAG_A,
-                                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        //TOD: revisar j-(rank&1) esta medio hardcode
-                        MPI_Recv(&((*sub_b)[j-(rank & 1) + k * HALF_SIZE][i * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER,
-                                TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                    }
-                }
-            }
-        }
+          for (int32_t j = 0; j <HALF_SIZE ; j++) {
+              MPI_Recv(&((*sub_a)[j][(rank & 1) * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER, TAG_A,
+                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+              //TOD: revisar j-(rank&1) esta medio hardcode
+              MPI_Recv((*sub_b)[j + (rank > 2) * HALF_SIZE], HALF_SIZE, MPI_INT, MASTER,
+                      TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+          }
+
+
     }
     /*#################################################################
     #######################  ENVIO DE SUB MATRICES  ###################

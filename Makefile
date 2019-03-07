@@ -1,12 +1,23 @@
 CC=mpicc
-CODE=main.c
 RUNNER=mpirun
 PROC_COUNT=4
 CFLAGS=-fopenmp
+EXE_SINC=main_sinc
+EXE_ASINC=main_asinc
+CODE_SINC=main.c
+CODE_ASINC=main_asinc.c
+
 
 all: $(CODE)
-	$(CC) $(CFLAGS) -o main $(CODE)
+	$(CC) $(CFLAGS) -o $(EXE_SINC) $(CODE_SINC)
+	$(CC) $(CFLAGS) -o $(EXE_ASINC) $(CODE_ASINC)
 
-run:
-	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) ./main
+run_sinc:
+	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_SINC)
+
+run_asinc:
+	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_ASINC)
+
+
+
 

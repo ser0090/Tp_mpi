@@ -2,3 +2,6 @@
 #CMakeLists.txt
 cmake-build-debug/
 cmake-build-release/
+main_asinc
+main_sinc
+
