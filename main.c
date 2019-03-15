@@ -39,7 +39,6 @@ int main(int argc, char** argv) {
     my_sub_b_t* sub_b;
 
     MPI_Init(NULL, NULL);   // Initialize the MPI environment
-    //MPI_Status stat;        // required variable for receive routines
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);       // Get the rank of the process
 
@@ -86,22 +85,22 @@ int main(int argc, char** argv) {
 
         start = omp_get_wtime();
         for (int32_t j = 0; j < HALF_SIZE; j++) {
-            MPI_Send(&((*matrix_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT,1, TAG_A, MPI_COMM_WORLD);
-            MPI_Send(&((*matrix_b)[j][HALF_SIZE]), HALF_SIZE, MPI_INT,1, TAG_B, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT32_T,1, TAG_A, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_b)[j][HALF_SIZE]), HALF_SIZE, MPI_INT32_T,1, TAG_B, MPI_COMM_WORLD);
 
-            MPI_Send(&((*matrix_a)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT, 2, TAG_A, MPI_COMM_WORLD);
-            MPI_Send(&((*matrix_b)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT, 2, TAG_B, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_a)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT32_T, 2, TAG_A, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_b)[j + HALF_SIZE][0]), HALF_SIZE, MPI_INT32_T, 2, TAG_B, MPI_COMM_WORLD);
 
-            MPI_Send(&((*matrix_a)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3, TAG_A, MPI_COMM_WORLD);
-            MPI_Send(&((*matrix_b)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3, TAG_B, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_a)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT32_T, 3, TAG_A, MPI_COMM_WORLD);
+            MPI_Send(&((*matrix_b)[j + HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT32_T, 3, TAG_B, MPI_COMM_WORLD);
         }
         printf("TIME: fraccionar: %f\n",omp_get_wtime()-start);
     }
     else{
         for (int32_t j = 0; j <HALF_SIZE ; j++) {
-            MPI_Recv(&((*sub_a)[j][(rank & 1) * HALF_SIZE]), HALF_SIZE, MPI_INT, MASTER, TAG_A, MPI_COMM_WORLD,
+            MPI_Recv(&((*sub_a)[j][(rank & 1) * HALF_SIZE]), HALF_SIZE, MPI_INT32_T, MASTER, TAG_A, MPI_COMM_WORLD,
                     MPI_STATUS_IGNORE);
-            MPI_Recv((*sub_b)[j + (rank > 2) * HALF_SIZE], HALF_SIZE, MPI_INT, MASTER, TAG_B, MPI_COMM_WORLD,
+            MPI_Recv((*sub_b)[j + (rank > 2) * HALF_SIZE], HALF_SIZE, MPI_INT32_T, MASTER, TAG_B, MPI_COMM_WORLD,
                     MPI_STATUS_IGNORE);
         }
     }
@@ -112,26 +111,26 @@ int main(int argc, char** argv) {
 
     if(!(rank & 1)){ //is rank es par para A
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Sendrecv((*sub_a)+j, HALF_SIZE, MPI_INT, rank+1, TAG_A,&((*sub_a)[j][HALF_SIZE]),HALF_SIZE, MPI_INT,
+            MPI_Sendrecv((*sub_a)+j, HALF_SIZE, MPI_INT32_T, rank+1, TAG_A,&((*sub_a)[j][HALF_SIZE]),HALF_SIZE, MPI_INT32_T,
                     rank+1, TAG_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
     else{
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Sendrecv(&((*sub_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, rank-1, TAG_A, (*sub_a)+j, HALF_SIZE, MPI_INT,
+            MPI_Sendrecv(&((*sub_a)[j][HALF_SIZE]), HALF_SIZE, MPI_INT32_T, rank-1, TAG_A, (*sub_a)+j, HALF_SIZE, MPI_INT32_T,
                     rank-1,TAG_A, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
 
     if(!(rank >> 1)){ // Pasaje de Matrix B  (rank >> 1) -> rank/2
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Sendrecv((*sub_b)+j, HALF_SIZE, MPI_INT, rank+2, TAG_B, (*sub_b)+j+HALF_SIZE, HALF_SIZE, MPI_INT,
+            MPI_Sendrecv((*sub_b)+j, HALF_SIZE, MPI_INT32_T, rank+2, TAG_B, (*sub_b)+j+HALF_SIZE, HALF_SIZE, MPI_INT32_T,
                     rank+2, TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
     else{
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Sendrecv((*sub_b)+j+HALF_SIZE, HALF_SIZE, MPI_INT, rank-2, TAG_B, (*sub_b)+j, HALF_SIZE, MPI_INT,
+            MPI_Sendrecv((*sub_b)+j+HALF_SIZE, HALF_SIZE, MPI_INT32_T, rank-2, TAG_B, (*sub_b)+j, HALF_SIZE, MPI_INT32_T,
                     rank-2,TAG_B, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
     }
@@ -161,9 +160,9 @@ int main(int argc, char** argv) {
     if(rank == MASTER) {
         start = omp_get_wtime();
         for (int32_t j=0; j<HALF_SIZE; ++j) {
-            MPI_Recv(&((*matrix_c)[j][HALF_SIZE]), HALF_SIZE, MPI_INT, 1, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv((*matrix_c)+j+HALF_SIZE, HALF_SIZE, MPI_INT, 2, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Recv(&((*matrix_c)[j+HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT, 3, TAG_C, MPI_COMM_WORLD,
+            MPI_Recv(&((*matrix_c)[j][HALF_SIZE]), HALF_SIZE, MPI_INT32_T, 1, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv((*matrix_c)+j+HALF_SIZE, HALF_SIZE, MPI_INT32_T, 2, TAG_C, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&((*matrix_c)[j+HALF_SIZE][HALF_SIZE]), HALF_SIZE, MPI_INT32_T, 3, TAG_C, MPI_COMM_WORLD,
                     MPI_STATUS_IGNORE);
         }
         printf("RANK %d: Termino todo\n",rank);
@@ -187,7 +186,7 @@ int main(int argc, char** argv) {
     }
     else {
         for (int32_t j = 0; j < HALF_SIZE; ++j) {
-            MPI_Send((*sub_c)+j, HALF_SIZE, MPI_INT, MASTER, TAG_C, MPI_COMM_WORLD);
+            MPI_Send((*sub_c)+j, HALF_SIZE, MPI_INT32_T, MASTER, TAG_C, MPI_COMM_WORLD);
         }
         printf("RANK %d: Termino todo\n",rank);
     }
