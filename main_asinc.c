@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define SIZE 1500
+#define SIZE 2000
 #define MASTER 0
 #define TAG_A 1
 #define TAG_B 2
@@ -12,7 +12,7 @@
 #define SUCCESS 0
 #define SUB_SIZE SIZE/2
 
-#define COLOR_BLUE    "\x1b[34m"
+#define COLOR_GREEN   "\x1b[1;32m"
 #define COLOR_RESET   "\x1b[0m"
 
 typedef int32_t my_matrix_t [SIZE][SIZE];
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
     }
 
     ///#################################################################
-    printf("RANK %d: Intercambio de A \n",rank);
+    //printf("RANK %d: Intercambio de A \n",rank);
 
     if (!(rank & 1)) { //is rank es par para A
         fragment_a_req[rank + 1] = (MPI_Request *) malloc(SUB_SIZE * sizeof(MPI_Request));
@@ -285,7 +285,7 @@ int main(int argc, char** argv) {
         MPI_Waitall(SUB_SIZE, fragment_c_req[3], MPI_STATUS_IGNORE);
 
         printf("TIME: construir C: %f\n", omp_get_wtime() - start);
-        printf("%sTIME: Total: %f%s\n", COLOR_BLUE, omp_get_wtime() - start_time, COLOR_RESET);
+        printf("%sTIME: Total: %f%s\n", COLOR_GREEN, omp_get_wtime() - start_time, COLOR_RESET);
 
         free(matrix_a);
         free(matrix_b);
@@ -304,6 +304,10 @@ int main(int argc, char** argv) {
         MPI_Waitall(SUB_SIZE,fragment_c_req[rank],MPI_STATUSES_IGNORE);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    free(sub_a);
+    free(sub_b);
+    free(sub_c);
     MPI_Finalize();
 
     exit(EXIT_SUCCESS);
