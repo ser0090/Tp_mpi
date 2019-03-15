@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define SIZE 1024
+#define SIZE 2048
 #define HALF_SIZE SIZE/2
 #define MASTER 0
 #define TAG_A 1
@@ -20,6 +20,7 @@ typedef int32_t my_sub_c_t [HALF_SIZE][HALF_SIZE];
 int control(int32_t **matrix, int32_t size);
 
 int main(int argc, char** argv) {
+    printf("size: %d\n",SIZE);
 
     int32_t world_size;
     int32_t rank;
