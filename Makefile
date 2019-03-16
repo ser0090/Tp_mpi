@@ -1,16 +1,21 @@
 CC=mpicc
-MAIN_BLOQ=main.c
-EXE_BLOQ=main
-MAIN_NBLOQ=main_asinc.c
-EXE_NBLOQ=main_asinc
 RUNNER=mpirun
 PROC_COUNT=4
 CFLAGS=-fopenmp
+EXE_SINC=main_sinc
+EXE_ASINC=main_asinc
+CODE_SINC=main.c
+CODE_ASINC=main_asinc.c
+
 
 all: $(CODE)
-	$(CC) $(CFLAGS) $(OTHER_CFLAGS) -o $(EXE_BLOQ)  $(MAIN_BLOQ)
-	$(CC) $(CFLAGS) $(OTHER_CFLAGS) -o $(EXE_NBLOQ)  $(MAIN_NBLOQ)
+	$(CC) $(CFLAGS) -o $(EXE_SINC) $(OTHER_CFLAGS) $(CODE_SINC)
+	$(CC) $(CFLAGS) -o $(EXE_ASINC) $(OTHER_CFLAGS) $(CODE_ASINC)
+
 run_sinc:
-	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_BLOQ)
+	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_SINC)
+
 run_asinc:
-	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_NBLOQ)
+	$(RUNNER) -np $(PROC_COUNT) $(RUNNER_FLAGS) $(EXE_ASINC)
+
+
