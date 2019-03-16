@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <omp.h>
 
-#define SIZE 2000
+#define SIZE 1500
 #define MASTER 0
 #define TAG_A 1
 #define TAG_B 2
@@ -34,6 +34,8 @@ int main(int argc, char** argv) {
     double start_time;
     double start;
 
+    int32_t *ptr_a;
+
     my_matrix_t* matrix_a;
     my_matrix_t* matrix_b;
     my_matrix_t* matrix_c;
@@ -45,6 +47,10 @@ int main(int argc, char** argv) {
     MPI_Request *fragment_a_req[4] = {NULL,NULL,NULL,NULL};
     MPI_Request *fragment_b_req[4] = {NULL,NULL,NULL,NULL};
     MPI_Request *fragment_c_req[4] = {NULL,NULL,NULL,NULL};
+
+    MPI_Request *ptr_rq_a;
+    MPI_Request *ptr_rq_b;
+    MPI_Request *ptr_rq_c;
 
     MPI_Init(NULL, NULL);   // Initialize the MPI environment
 
@@ -137,14 +143,15 @@ int main(int argc, char** argv) {
             MPI_Finalize();
             exit(EXIT_FAILURE);
         }
-
+        shift = (rank != 2)*SUB_SIZE;
+        ptr_rq_a = &(fragment_b_req[rank][0]);
         for (int32_t j = 0; j <SUB_SIZE ; j++) {
-            MPI_Irecv((*sub_b)[j+(rank != 2)*SUB_SIZE], SUB_SIZE, MPI_INT32_T, MASTER, TAG_B, MPI_COMM_WORLD,
-                    &(fragment_b_req[rank][j]));
+            MPI_Irecv((*sub_b)[j+shift], SUB_SIZE, MPI_INT32_T, MASTER, TAG_B, MPI_COMM_WORLD, ptr_rq_a++);
         }
+        shift = (rank & 1)*SUB_SIZE;
+        ptr_rq_b = &(fragment_a_req[rank][0]);
         for (int32_t j = 0; j <SUB_SIZE ; j++) {
-            MPI_Irecv(&((*sub_a)[j][(rank & 1)*SUB_SIZE]), SUB_SIZE, MPI_INT32_T, MASTER, TAG_A, MPI_COMM_WORLD,
-                    &(fragment_a_req[rank][j]));
+            MPI_Irecv(&((*sub_a)[j][shift]), SUB_SIZE, MPI_INT32_T, MASTER, TAG_A, MPI_COMM_WORLD, ptr_rq_b++);
         }
 
         MPI_Waitall(SUB_SIZE, fragment_b_req[rank], MPI_STATUSES_IGNORE);
@@ -156,21 +163,22 @@ int main(int argc, char** argv) {
 
     printf("RANK %d: Semiprocesamiento \n",rank);
     if (rank != MASTER) { // Pasaje de Matrix B
+        shift = (!(rank & 1)) * SUB_SIZE;
+        ptr_rq_b = &(fragment_b_req[rank][0]);
         for (int32_t j = 0; j < SUB_SIZE; ++j) {
-            MPI_Irecv(((*sub_b)[j + (!(rank & 1)) * SUB_SIZE]), SUB_SIZE, MPI_INT32_T, MASTER, TAG_B, MPI_COMM_WORLD,
-                    &(fragment_b_req[rank][j]));
+            MPI_Irecv(((*sub_b)[j + shift]), SUB_SIZE, MPI_INT32_T, MASTER, TAG_B, MPI_COMM_WORLD, ptr_rq_b++);
         }
     }
 
     // PROUCTO dejando fija la columna de B
     //despliegue del procesamiento para esperar lo datos de a
     shift = (rank & 1) * SUB_SIZE;
-
     for (int32_t j = 0; j < SUB_SIZE; j++) { // i para las columnas de la matriz resultante
-        if (rank != MASTER) MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
+        ptr_a = &((*sub_a)[j][shift]);
         tmp = 0;
+        if (rank != MASTER) MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
         for (int32_t k = 0; k < SUB_SIZE; k++) { //k para realizar la multiplicacion de los elementos
-            tmp += (*sub_a)[j][k + shift] * (*sub_b)[k + shift][0];
+            tmp += *(ptr_a++) * (*sub_b)[k + shift][0];
         }
         (*sub_c)[j][0] = tmp;
     }
@@ -181,20 +189,20 @@ int main(int argc, char** argv) {
     if (!(rank & 1)) { //is rank es par para A
         fragment_a_req[rank + 1] = (MPI_Request *) malloc(SUB_SIZE * sizeof(MPI_Request));
         MPI_Request aux_req;
+        ptr_rq_a = &(fragment_a_req[rank + 1][0]);
         for (int32_t j = 0; j < SUB_SIZE; ++j) {
             //if(rank != MASTER) MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
-            MPI_Isend(&((*sub_a)[j]), SUB_SIZE, MPI_INT32_T, rank+1, TAG_A, MPI_COMM_WORLD, &aux_req);
+            MPI_Isend((*sub_a)+j, SUB_SIZE, MPI_INT32_T, rank+1, TAG_A, MPI_COMM_WORLD, &aux_req);
             //MPI_Request_free(&aux_req);
-            MPI_Irecv(&((*sub_a)[j][SUB_SIZE]), SUB_SIZE, MPI_INT32_T, rank+1, TAG_A, MPI_COMM_WORLD,
-                      &(fragment_a_req[rank + 1][j]));
+            MPI_Irecv(&((*sub_a)[j][SUB_SIZE]), SUB_SIZE, MPI_INT32_T, rank+1, TAG_A, MPI_COMM_WORLD, ptr_rq_a++);
         }
         MPI_Request_free(&aux_req);
     } else {
         fragment_a_req[rank-1] = (MPI_Request *) malloc(SUB_SIZE * sizeof(MPI_Request));
         MPI_Request aux_req;
+        ptr_rq_a = &(fragment_a_req[rank-1][0]);
         for (int32_t j = 0; j < SUB_SIZE; ++j) {
-            MPI_Irecv(&((*sub_a)[j]), SUB_SIZE, MPI_INT32_T, rank-1, TAG_A, MPI_COMM_WORLD,
-                    &(fragment_a_req[rank-1][j]));
+            MPI_Irecv((*sub_a)+j, SUB_SIZE, MPI_INT32_T, rank-1, TAG_A, MPI_COMM_WORLD, ptr_rq_a++);
             //if (rank != MASTER) MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
             MPI_Isend(&((*sub_a)[j][SUB_SIZE]), SUB_SIZE, MPI_INT32_T, rank - 1, TAG_A, MPI_COMM_WORLD, &aux_req);
             //MPI_Request_free(&aux_req);
@@ -208,8 +216,9 @@ int main(int argc, char** argv) {
     for (int32_t i = 1; i < SUB_SIZE; i++) { //i para las filas de la matriz resultante
         for (int32_t j = 0; j < SUB_SIZE; j++) { // i para las columnas de la matriz resultante
             tmp = 0;
+            ptr_a = &((*sub_a)[j][shift]);
             for (int32_t k = 0; k < SUB_SIZE; k++) { //k para realizar la multiplicacion de los elementos
-                tmp += (*sub_a)[j][k + shift] * (*sub_b)[k + shift][i];
+                tmp += *(ptr_a++) * (*sub_b)[k + shift][i];
             }
             (*sub_c)[j][i] = tmp;
         }
@@ -230,11 +239,13 @@ int main(int argc, char** argv) {
 
         //despliegue del procesamiento para esperar lo datos de a
     for (int32_t j=0; j<SUB_SIZE ;j++){ // i para las columnas de la matriz resultante
-        if (rank != MASTER)
-            MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
         tmp = 0 ;
+        ptr_a = &((*sub_a)[j][shift]);
+        if (rank != MASTER) {
+            MPI_Wait(&(fragment_a_req[rank][j]), MPI_STATUS_IGNORE);
+        }
         for (int32_t k=0; k<SUB_SIZE; k++){ //k para realizar la multiplicacion de los elementos
-            tmp += (*sub_a)[j][k+shift] * (*sub_b)[k+shift][0];
+            tmp += *(ptr_a++) * (*sub_b)[k+shift][0];
         }
         (*sub_c)[j][0] += tmp;
     }
@@ -245,8 +256,9 @@ int main(int argc, char** argv) {
     for (int32_t i=1; i<SUB_SIZE; i++){ //i para las filas de la matriz resultante
         for (int32_t j=0; j<SUB_SIZE ;j++){ // i para las columnas de la matriz resultante
             tmp = 0 ;
+            ptr_a = &((*sub_a)[j][shift]);
             for (int32_t k=0; k<SUB_SIZE; k++){ //k para realizar la multiplicacion de los elementos
-                tmp += (*sub_a)[j][k+shift] * (*sub_b)[k+shift][i];
+                tmp += *(ptr_a++) * (*sub_b)[k+shift][i];
             }
             (*sub_c)[j][i] += tmp;
         }
